@@ -54,7 +54,7 @@ const (
 	WHILE
 )
 
-var tokenType = map[TokenType]string{
+var tokenTypes = map[TokenType]string{
 	ILLEGAL: "ILLEGAL",
 	EOF:     "EOF",
 	COMMENT: "COMMENT",
@@ -122,7 +122,7 @@ var keywords = map[string]TokenType{
 }
 
 func (t TokenType) String() string {
-	return tokenType[t]
+	return tokenTypes[t]
 }
 
 type Token struct {
