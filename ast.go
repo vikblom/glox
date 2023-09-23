@@ -1,5 +1,6 @@
 package glox
 
+// TODO: Expr.String().
 type Expr interface {
 	// TODO
 	express()

@@ -1,17 +1,30 @@
 package glox
 
-import "fmt"
+import (
+	"fmt"
+)
 
 type Parser struct {
 	tokens  []Token
 	current int
+	errored bool
 }
 
 func NewParser(tokens []Token) *Parser {
 	return &Parser{
 		tokens:  tokens,
 		current: 0,
+
+		errored: false,
 	}
+}
+
+func (p *Parser) Parse() (Expr, error) {
+	exp := p.parseExpr()
+	if p.errored {
+		return nil, fmt.Errorf("errors during parse")
+	}
+	return exp, nil
 }
 
 func (p *Parser) parseExpr() Expr {
@@ -77,7 +90,6 @@ func (p *Parser) parseUnary() Expr {
 }
 
 func (p *Parser) parsePrimary() Expr {
-
 	switch {
 	case p.match(FALSE):
 		return &Literal{val: false}
@@ -91,9 +103,12 @@ func (p *Parser) parsePrimary() Expr {
 		expr := p.parseExpr()
 		p.consume(PAREN_RIGHT, "Expected closing ')'")
 		return &Grouping{group: expr}
+	default:
+		at := p.peek()
+		p.error(at.Line, "Expected expression")
+		p.sync()
+		return nil
 	}
-
-	return nil
 }
 
 // match if currently on one of token types.
@@ -124,12 +139,15 @@ func (p *Parser) consume(tt TokenType, msg string) {
 }
 
 func (p *Parser) error(line int, msg string) {
+	p.errored = true
 	// Don't try to emulate exceptions with panic.
 	// Just report and try to sync at the bottom of the callstack like
 	// the Go parser does.
 	fmt.Printf("error on line %d: %s", line, msg)
 }
 
+// FIXME: This will probably invalidate expectations up the stack?
+// But it should guarantee to make some progress, else we're stuck.
 func (p *Parser) sync() {
 	p.advance()
 	for !p.isAtEnd() {
