@@ -1,9 +1,25 @@
 package glox
 
-// TODO: Expr.String().
+import (
+	"fmt"
+	"strings"
+)
+
+// Visitor can visit any Expr.
+//
+// The book makes it more explicit what needs to be handled.
+// But that seems tedious.
+//
+//	type ExprVisitor interface {
+//		VisitLiteralExpr(Literal) any
+//		VisitUnaryExpr(UnaryExpr) any
+//		VisitBinaryExpr(BinaryExpr) any
+//	}
+type Visitor func(Expr) any
+
 type Expr interface {
-	// TODO
-	express()
+	// Visitable.
+	Accept(Visitor) any
 }
 
 type (
@@ -26,18 +42,47 @@ type (
 	}
 )
 
-func (e *BinaryExpr) express() {
+func (e *BinaryExpr) Accept(v Visitor) any { return v(e) }
+func (e *UnaryExpr) Accept(v Visitor) any  { return v(e) }
+func (e *Literal) Accept(v Visitor) any    { return v(e) }
+func (e *Grouping) Accept(v Visitor) any   { return v(e) }
 
+// PrintAST representation of Expr node.
+func PrintAST(expr Expr) string {
+	return expr.Accept(printVisitor).(string)
 }
 
-func (e *UnaryExpr) express() {
-
+func printVisitor(e Expr) any {
+	switch v := e.(type) {
+	case *BinaryExpr:
+		l := printVisitor(v.left)
+		r := printVisitor(v.right)
+		return parenthesize(v.op.Literal, l, r)
+	case *UnaryExpr:
+		r := printVisitor(v.right)
+		return parenthesize(v.op.Literal, r)
+	case *Literal:
+		return v.val // TODO: Parenthesis?
+	case *Grouping:
+		g := printVisitor(v.group)
+		return parenthesize("group", g)
+	default:
+		panic(fmt.Sprintf("unknown as node: %T :: %#v", e, e))
+	}
 }
 
-func (e *Literal) express() {
+func parenthesize(vs ...any) string {
+	if len(vs) == 0 {
+		return "()"
+	}
+	sb := strings.Builder{}
+	fmt.Fprintf(&sb, "(")
 
-}
+	fmt.Fprintf(&sb, "%s", vs[0])
+	for _, v := range vs[1:] {
+		fmt.Fprintf(&sb, " %s", v)
+	}
+	fmt.Fprintf(&sb, ")")
 
-func (e *Grouping) express() {
-
+	return sb.String()
 }

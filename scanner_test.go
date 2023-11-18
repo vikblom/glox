@@ -6,6 +6,10 @@ import (
 	"github.com/vikblom/glox"
 )
 
+// FIXME: Panics
+// src := "1 + 1"
+// toks, err := glox.ScanString(src)
+
 func TestScannerKinds(t *testing.T) {
 	tests := []struct {
 		src  string

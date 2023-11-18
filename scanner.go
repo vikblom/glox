@@ -331,3 +331,20 @@ whitespace:
 	// TODO: Test Line and Literal.
 	return Token{Kind: kind, Line: line, Literal: string(s.src[start:s.at])}
 }
+
+func ScanString(s string) ([]Token, error) {
+	sc := NewScanner([]byte(s))
+
+	toks := []Token{}
+	for {
+		tok := sc.Scan()
+		if tok.Kind == ILLEGAL {
+			return nil, fmt.Errorf("ILLEGAL token encountered: %+v", tok)
+		}
+		if tok.Kind == EOF {
+			break
+		}
+		toks = append(toks, tok)
+	}
+	return toks, nil
+}
