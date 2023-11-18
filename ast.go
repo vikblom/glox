@@ -47,6 +47,75 @@ func (e *UnaryExpr) Accept(v Visitor) any  { return v(e) }
 func (e *Literal) Accept(v Visitor) any    { return v(e) }
 func (e *Grouping) Accept(v Visitor) any   { return v(e) }
 
+type runtimeError struct{ error }
+
+func runtimeErrf(format string, args ...any) {
+	panic(runtimeError{error: fmt.Errorf(format, args...)})
+}
+
+// EvalAST rooted at expr.
+func EvalAST(expr Expr) (v any, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			if re, ok := r.(runtimeError); ok {
+				err = re.error
+			} else {
+				panic(r)
+			}
+		}
+	}()
+
+	v = expr.Accept(evalVisitor)
+
+	return
+}
+
+func evalVisitor(e Expr) any {
+	switch v := e.(type) {
+	case *Grouping:
+		return evalVisitor(v.group)
+
+	case *BinaryExpr:
+		l := evalVisitor(v.left)
+		r := evalVisitor(v.right)
+		switch v.op.Kind {
+		case PLUS:
+			return l.(float64) + r.(float64)
+		case DASH:
+			return l.(float64) - r.(float64)
+		case STAR:
+			return l.(float64) * r.(float64)
+		case SLASH:
+			return l.(float64) / r.(float64)
+		}
+		runtimeErrf("impossible binary")
+
+	case *UnaryExpr:
+		switch v.op.Kind {
+		case DASH:
+			r := evalVisitor(v.right)
+			if f, ok := r.(float64); ok {
+				return -f
+			}
+		case BANG:
+			return !isTruthy(v)
+		}
+		runtimeErrf("impossible unary")
+
+	case *Literal:
+		return v.val
+
+	default:
+		panic(fmt.Sprintf("unknown as node: %T :: %#v", e, e))
+	}
+
+	panic("unreachable")
+}
+
+func isTruthy(e Expr) bool {
+	return false
+}
+
 // PrintAST representation of Expr node.
 func PrintAST(expr Expr) string {
 	return expr.Accept(printVisitor).(string)

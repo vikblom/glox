@@ -2,6 +2,7 @@ package glox
 
 import (
 	"fmt"
+	"strconv"
 )
 
 type Parser struct {
@@ -97,8 +98,12 @@ func (p *Parser) parsePrimary() Expr {
 		return &Literal{val: true}
 	case p.match(NIL):
 		return &Literal{val: nil}
-	case p.match(NUMBER, STRING):
+	case p.match(STRING):
 		return &Literal{val: p.previous().Literal}
+	case p.match(NUMBER):
+		// The book parses floats in the scanner.
+		f, _ := strconv.ParseFloat(p.previous().Literal, 64)
+		return &Literal{val: f}
 	case p.match(PAREN_LEFT):
 		expr := p.parseExpr()
 		p.consume(PAREN_RIGHT, "Expected closing ')'")

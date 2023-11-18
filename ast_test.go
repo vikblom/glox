@@ -34,3 +34,41 @@ func TestPrinter(t *testing.T) {
 		}
 	}
 }
+
+func TestEvalArithmetic(t *testing.T) {
+
+	tests := []struct {
+		src  string
+		want float64
+	}{
+		{src: "1;", want: 1.0},
+		{src: "1 + 1;", want: 2.0},
+		{src: "1 + (2 - 3);", want: 0.0},
+		{src: "-1 * -1;", want: 1.0},
+	}
+
+	for _, tt := range tests {
+		toks, err := glox.ScanString(tt.src)
+		if err != nil {
+			t.Fatalf("scan string: %s", err)
+		}
+
+		parser := glox.NewParser(toks)
+		expr, err := parser.Parse()
+		if err != nil {
+			t.Fatalf("parse: %s", err)
+		}
+
+		v, err := glox.EvalAST(expr)
+		if err != nil {
+			t.Fatalf("eval ast: %s", err)
+		}
+		got, ok := v.(float64)
+		if !ok {
+			t.Fatalf("expected float64 but got %T :: %v", v, v)
+		}
+		if tt.want != got {
+			t.Fatalf(`PrintAst("%s") = %f but want %f`, tt.src, got, tt.want)
+		}
+	}
+}
