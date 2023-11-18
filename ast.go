@@ -79,6 +79,11 @@ func evalVisitor(e Expr) any {
 		l := evalVisitor(v.left)
 		r := evalVisitor(v.right)
 		switch v.op.Kind {
+		case EQUAL_EQUAL:
+			return isEqual(l, r)
+		case BANG_EQUAL:
+			return !isEqual(l, r)
+
 		case PLUS:
 			return l.(float64) + r.(float64)
 		case DASH:
@@ -87,6 +92,15 @@ func evalVisitor(e Expr) any {
 			return l.(float64) * r.(float64)
 		case SLASH:
 			return l.(float64) / r.(float64)
+
+		case GREATER:
+			return l.(float64) > r.(float64)
+		case GREATER_EQUAL:
+			return l.(float64) >= r.(float64)
+		case LESS:
+			return l.(float64) < r.(float64)
+		case LESS_EQUAL:
+			return l.(float64) <= r.(float64)
 		}
 		runtimeErrf("impossible binary")
 
@@ -98,7 +112,8 @@ func evalVisitor(e Expr) any {
 				return -f
 			}
 		case BANG:
-			return !isTruthy(v)
+			vv := evalVisitor(v.right)
+			return !isTruthy(vv)
 		}
 		runtimeErrf("impossible unary")
 
@@ -112,8 +127,25 @@ func evalVisitor(e Expr) any {
 	panic("unreachable")
 }
 
-func isTruthy(e Expr) bool {
-	return false
+func isEqual(a, b any) bool {
+	if a == nil && b == nil {
+		return true
+	}
+	if a == nil {
+		return false
+	}
+	return a == b // Does this work on interfaces?
+}
+
+// Literal false and nil are falsy.
+func isTruthy(v any) bool {
+	if v == nil {
+		return false
+	}
+	if b, ok := v.(bool); ok {
+		return b
+	}
+	return true
 }
 
 // PrintAST representation of Expr node.

@@ -72,3 +72,46 @@ func TestEvalArithmetic(t *testing.T) {
 		}
 	}
 }
+
+func TestEvalComparison(t *testing.T) {
+
+	tests := []struct {
+		src  string
+		want bool
+	}{
+		{src: "1 < 2;", want: true},
+		{src: "(1 + 1) <= (1 * 2);", want: true},
+		{src: "1 + (2 - 3) == 0;", want: true},
+		{src: "true == true;", want: true},
+		{src: "true != true;", want: false},
+
+		{src: "1 >= 3;", want: false},
+		{src: "!false;", want: true},
+		{src: "!(false) == true;", want: true},
+	}
+
+	for _, tt := range tests {
+		toks, err := glox.ScanString(tt.src)
+		if err != nil {
+			t.Fatalf("scan string: %s", err)
+		}
+
+		parser := glox.NewParser(toks)
+		expr, err := parser.Parse()
+		if err != nil {
+			t.Fatalf("parse: %s", err)
+		}
+
+		v, err := glox.EvalAST(expr)
+		if err != nil {
+			t.Fatalf("eval ast: %s", err)
+		}
+		got, ok := v.(bool)
+		if !ok {
+			t.Fatalf("expected bool but got %T :: %v", v, v)
+		}
+		if tt.want != got {
+			t.Fatalf(`PrintAst("%s") = %v but want %v`, tt.src, got, tt.want)
+		}
+	}
+}
