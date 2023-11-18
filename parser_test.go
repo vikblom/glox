@@ -33,3 +33,19 @@ func TestParser(t *testing.T) {
 
 	t.Logf("%#v", exp)
 }
+
+func TestParseSyntaxError(t *testing.T) {
+	src := "1 + ;"
+	toks, err := glox.ScanString(src)
+	if err != nil {
+		t.Fatalf("scan string %q: %s", src, err)
+	}
+
+	// TODO: Return parsing errors?
+	p := glox.NewParser(toks)
+	_, err = p.Parse()
+	if err != nil {
+		t.Fatalf("parse: %s", err)
+	}
+
+}

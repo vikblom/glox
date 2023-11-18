@@ -53,7 +53,16 @@ func runtimeErrf(format string, args ...any) {
 	panic(runtimeError{error: fmt.Errorf(format, args...)})
 }
 
+func mustBeNumbers(tok Token, args ...any) {
+	for _, o := range args {
+		if _, ok := o.(float64); !ok {
+			runtimeErrf("%q requires number arguments: %T", tok.Literal, o)
+		}
+	}
+}
+
 // EvalAST rooted at expr.
+// There are 4 types used for values: any, string, float64 & bool.
 func EvalAST(expr Expr) (v any, err error) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -83,23 +92,33 @@ func evalVisitor(e Expr) any {
 			return isEqual(l, r)
 		case BANG_EQUAL:
 			return !isEqual(l, r)
+		}
 
+		switch v.op.Kind {
 		case PLUS:
+			mustBeNumbers(v.op, l, r)
 			return l.(float64) + r.(float64)
 		case DASH:
+			mustBeNumbers(v.op, l, r)
 			return l.(float64) - r.(float64)
 		case STAR:
+			mustBeNumbers(v.op, l, r)
 			return l.(float64) * r.(float64)
 		case SLASH:
+			mustBeNumbers(v.op, l, r)
 			return l.(float64) / r.(float64)
 
 		case GREATER:
+			mustBeNumbers(v.op, l, r)
 			return l.(float64) > r.(float64)
 		case GREATER_EQUAL:
+			mustBeNumbers(v.op, l, r)
 			return l.(float64) >= r.(float64)
 		case LESS:
+			mustBeNumbers(v.op, l, r)
 			return l.(float64) < r.(float64)
 		case LESS_EQUAL:
+			mustBeNumbers(v.op, l, r)
 			return l.(float64) <= r.(float64)
 		}
 		runtimeErrf("impossible binary")
@@ -108,6 +127,7 @@ func evalVisitor(e Expr) any {
 		switch v.op.Kind {
 		case DASH:
 			r := evalVisitor(v.right)
+			mustBeNumbers(v.op, r)
 			if f, ok := r.(float64); ok {
 				return -f
 			}

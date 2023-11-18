@@ -342,6 +342,7 @@ func ScanString(s string) ([]Token, error) {
 			return nil, fmt.Errorf("ILLEGAL token encountered: %+v", tok)
 		}
 		if tok.Kind == EOF {
+			toks = append(toks, tok)
 			break
 		}
 		toks = append(toks, tok)
