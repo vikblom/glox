@@ -195,8 +195,17 @@ func (i *Interpreter) execute(node Node) any {
 		}
 		i.env.define(v.name.Literal, val)
 		return nil
+
 	case *BlockStmt:
 		i.executeBlock(v)
+		return nil
+
+	case *IfStmt:
+		if isTruthy(i.execute(v.cond)) {
+			i.execute(v.thenBranch)
+		} else if v.elseBranch != nil {
+			i.execute(v.elseBranch)
+		}
 		return nil
 
 	default:

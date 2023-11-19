@@ -63,6 +63,9 @@ func (p *Parser) parseVarStmt() Stmt {
 }
 
 func (p *Parser) parseStmt() Stmt {
+	if p.match(IF) {
+		return p.parseIfStmt()
+	}
 	if p.match(PRINT) {
 		return p.parsePrintStmt()
 	}
@@ -70,6 +73,22 @@ func (p *Parser) parseStmt() Stmt {
 		return p.parseBlockStmt()
 	}
 	return p.parseExprStmt()
+}
+
+func (p *Parser) parseIfStmt() Stmt {
+	p.consume(PAREN_LEFT, "Expected opening '(' for if condition.")
+	cond := p.parseExpr()
+	p.consume(PAREN_RIGHT, "Expected closing ')' for if condition.")
+
+	// then and else statements can be blocks, or not.
+	thenBranch := p.parseStmt()
+
+	var elseBranch Stmt
+	if p.match(ELSE) {
+		elseBranch = p.parseStmt()
+	}
+
+	return &IfStmt{cond: cond, thenBranch: thenBranch, elseBranch: elseBranch}
 }
 
 func (p *Parser) parsePrintStmt() Stmt {
