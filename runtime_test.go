@@ -13,11 +13,7 @@ import (
 	"golang.org/x/tools/txtar"
 )
 
-var golden bool
-
-func init() {
-	flag.BoolVar(&golden, "golden", false, "Update golden files.")
-}
+var updateGolden = flag.Bool("golden", false, "Update golden files")
 
 func TestTestdata(t *testing.T) {
 	files, _ := filepath.Glob("testdata/*.txt")
@@ -55,7 +51,7 @@ func TestTestdata(t *testing.T) {
 			}
 			got := buf.String()
 
-			if golden {
+			if *updateGolden {
 				a.Files[1].Data = buf.Bytes()
 				bs := txtar.Format(a)
 				os.WriteFile(file, bs, 0644)
