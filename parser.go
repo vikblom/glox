@@ -66,6 +66,9 @@ func (p *Parser) parseStmt() Stmt {
 	if p.match(PRINT) {
 		return p.parsePrintStmt()
 	}
+	if p.match(BRACE_LEFT) {
+		return p.parseBlockStmt()
+	}
 	return p.parseExprStmt()
 }
 
@@ -75,6 +78,15 @@ func (p *Parser) parsePrintStmt() Stmt {
 	return &PrintStmt{expr: val}
 }
 
+func (p *Parser) parseBlockStmt() Stmt {
+	stmts := []Stmt{}
+	for p.peek().Kind != BRACE_RIGHT && !p.isAtEnd() {
+		stmts = append(stmts, p.parseDecl())
+	}
+	p.consume(BRACE_RIGHT, "Expected closing '}' after block.")
+	return &BlockStmt{statements: stmts}
+}
+
 func (p *Parser) parseExprStmt() Stmt {
 	val := p.parseExpr()
 	p.consume(SEMICOLON, "Expected terminating ';' after expression.")
@@ -82,7 +94,19 @@ func (p *Parser) parseExprStmt() Stmt {
 }
 
 func (p *Parser) parseExpr() Expr {
-	return p.parseEquality()
+	return p.parseAssign()
+}
+
+func (p *Parser) parseAssign() Expr {
+	expr := p.parseEquality()
+	if p.match(EQUAL) {
+		value := p.parseAssign()
+		if v, ok := expr.(*Variable); ok {
+			return &Assign{name: v.name, val: value}
+		}
+		runtimeErrf("Invalide assignment target %T", expr)
+	}
+	return expr
 }
 
 func (p *Parser) parseEquality() Expr {

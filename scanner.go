@@ -332,8 +332,8 @@ whitespace:
 	return Token{Kind: kind, Line: line, Literal: string(s.src[start:s.at])}
 }
 
-func ScanString(s string) ([]Token, error) {
-	sc := NewScanner([]byte(s))
+func ScanBytes(bs []byte) ([]Token, error) {
+	sc := NewScanner(bs)
 
 	toks := []Token{}
 	for {
@@ -348,4 +348,8 @@ func ScanString(s string) ([]Token, error) {
 		toks = append(toks, tok)
 	}
 	return toks, nil
+}
+
+func ScanString(s string) ([]Token, error) {
+	return ScanBytes([]byte(s))
 }
