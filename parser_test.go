@@ -21,6 +21,10 @@ func TestParser(t *testing.T) {
 			Literal: "1",
 		},
 		{
+			Kind:    glox.SEMICOLON,
+			Literal: ";",
+		},
+		{
 			Kind: glox.EOF,
 		},
 	}
@@ -41,11 +45,10 @@ func TestParseSyntaxError(t *testing.T) {
 		t.Fatalf("scan string %q: %s", src, err)
 	}
 
-	// TODO: Return parsing errors?
 	p := glox.NewParser(toks)
 	_, err = p.Parse()
-	if err != nil {
-		t.Fatalf("parse: %s", err)
+	if err == nil {
+		t.Fatalf("expected parse to fail but got: %s", err)
 	}
 
 }

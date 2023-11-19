@@ -23,20 +23,19 @@ func TestPrinter(t *testing.T) {
 		}
 
 		parser := glox.NewParser(toks)
-		expr, err := parser.Parse()
+		stmts, err := parser.Parse()
 		if err != nil {
 			t.Fatalf("parse: %s", err)
 		}
 
-		got := glox.PrintAST(expr)
+		got := glox.PrintAST(stmts[0].Stmt()) // FIXME
 		if tt.want != got {
-			t.Fatalf(`PrintAst("%s") = %q but want %q`, tt.src, got, tt.want)
+			t.Errorf(`PrintAst("%s") = %q but want %q`, tt.src, got, tt.want)
 		}
 	}
 }
 
 func TestEvalArithmetic(t *testing.T) {
-
 	tests := []struct {
 		src  string
 		want float64
@@ -54,12 +53,13 @@ func TestEvalArithmetic(t *testing.T) {
 		}
 
 		parser := glox.NewParser(toks)
-		expr, err := parser.Parse()
+		stmts, err := parser.Parse()
 		if err != nil {
 			t.Fatalf("parse: %s", err)
 		}
 
-		v, err := glox.EvalAST(expr)
+		i := glox.NewInterpreter()
+		v, err := i.EvalAST(stmts[0].Stmt()) // FIXME
 		if err != nil {
 			t.Fatalf("eval ast: %s", err)
 		}
@@ -97,12 +97,13 @@ func TestEvalComparison(t *testing.T) {
 		}
 
 		parser := glox.NewParser(toks)
-		expr, err := parser.Parse()
+		stmts, err := parser.Parse()
 		if err != nil {
 			t.Fatalf("parse: %s", err)
 		}
 
-		v, err := glox.EvalAST(expr)
+		i := glox.NewInterpreter()
+		v, err := i.EvalAST(stmts[0].Stmt()) // FIXME
 		if err != nil {
 			t.Fatalf("eval ast: %s", err)
 		}

@@ -8,24 +8,77 @@ import (
 type Parser struct {
 	tokens  []Token
 	current int
-	errored bool
 }
 
 func NewParser(tokens []Token) *Parser {
 	return &Parser{
 		tokens:  tokens,
 		current: 0,
-
-		errored: false,
 	}
 }
 
-func (p *Parser) Parse() (Expr, error) {
-	exp := p.parseExpr()
-	if p.errored {
-		return nil, fmt.Errorf("errors during parse")
+type parsingError struct{ error }
+
+func parseErrf(format string, args ...any) {
+	panic(parsingError{error: fmt.Errorf(format, args...)})
+}
+
+func (p *Parser) Parse() (stmts []Stmt, err error) {
+	// This is the synchronization point.
+	// The book does it inside parseDecl
+	defer func() {
+		if r := recover(); r != nil {
+			if re, ok := r.(parsingError); ok {
+				err = re.error
+			} else {
+				panic(r)
+			}
+		}
+	}()
+
+	for !p.isAtEnd() {
+		s := p.parseDecl()
+		stmts = append(stmts, s)
 	}
-	return exp, nil
+	return stmts, nil
+}
+
+func (p *Parser) parseDecl() Stmt {
+	if p.match(VAR) {
+		return p.parseVarStmt()
+	}
+	return p.parseStmt()
+}
+
+func (p *Parser) parseVarStmt() Stmt {
+	name := p.consume(IDENTIFIER, "Expected variable name.")
+
+	var init Expr
+	if p.match(EQUAL) {
+		init = p.parseExpr()
+	}
+
+	p.consume(SEMICOLON, "Expected terminating ';' after print value.")
+	return &VarStmt{name: name, init: init}
+}
+
+func (p *Parser) parseStmt() Stmt {
+	if p.match(PRINT) {
+		return p.parsePrintStmt()
+	}
+	return p.parseExprStmt()
+}
+
+func (p *Parser) parsePrintStmt() Stmt {
+	val := p.parseExpr()
+	p.consume(SEMICOLON, "Expected terminating ';' after print value.")
+	return &PrintStmt{expr: val}
+}
+
+func (p *Parser) parseExprStmt() Stmt {
+	val := p.parseExpr()
+	p.consume(SEMICOLON, "Expected terminating ';' after expression.")
+	return &ExprStmt{expr: val}
 }
 
 func (p *Parser) parseExpr() Expr {
@@ -108,6 +161,8 @@ func (p *Parser) parsePrimary() Expr {
 		expr := p.parseExpr()
 		p.consume(PAREN_RIGHT, "Expected closing ')'")
 		return &Grouping{group: expr}
+	case p.match(IDENTIFIER):
+		return &Variable{name: p.previous()}
 	default:
 		at := p.peek()
 		p.error(at.Line, "Expected expression")
@@ -132,23 +187,20 @@ func (p *Parser) match(tts ...TokenType) bool {
 	return false
 }
 
-func (p *Parser) consume(tt TokenType, msg string) {
+func (p *Parser) consume(tt TokenType, msg string) Token {
 	at := p.peek()
 	if at.Kind != tt {
 		p.error(at.Line, msg)
 		p.sync()
-		return
+		return Token{Kind: ILLEGAL, Line: at.Line}
 	}
 
-	p.advance()
+	return p.advance()
 }
 
 func (p *Parser) error(line int, msg string) {
-	p.errored = true
-	// Don't try to emulate exceptions with panic.
-	// Just report and try to sync at the bottom of the callstack like
-	// the Go parser does.
-	fmt.Printf("error on line %d: %s", line, msg)
+	// Emulate exceptions, unwinding the stack.
+	parseErrf("error on line %d: %s", line, msg)
 }
 
 // FIXME: This will probably invalidate expectations up the stack?

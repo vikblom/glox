@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-// Visitor can visit any Expr.
+// Visitor can visit any Expr or Stmt.
 //
 // The book makes it more explicit what needs to be handled.
 // But that seems tedious.
@@ -15,11 +15,46 @@ import (
 //		VisitUnaryExpr(UnaryExpr) any
 //		VisitBinaryExpr(BinaryExpr) any
 //	}
-type Visitor func(Expr) any
+type Visitor func(Node) any
+
+// Node in the AST which is visitable.
+type Node interface {
+	Accept(Visitor) any
+}
+
+type Stmt interface {
+	Node
+	// TOOD: Is this needed?
+	Stmt() Expr
+}
+
+type (
+	PrintStmt struct {
+		expr Expr
+	}
+
+	ExprStmt struct {
+		expr Expr
+	}
+
+	VarStmt struct {
+		name Token
+		init Expr
+	}
+)
+
+func (s *PrintStmt) Accept(v Visitor) any { return v(s) }
+func (s *ExprStmt) Accept(v Visitor) any  { return v(s) }
+func (s *VarStmt) Accept(v Visitor) any   { return v(s) }
+
+func (s *PrintStmt) Stmt() Expr { return s.expr }
+func (s *ExprStmt) Stmt() Expr  { return s.expr }
+func (s *VarStmt) Stmt() Expr   { return s.init }
 
 type Expr interface {
-	// Visitable.
-	Accept(Visitor) any
+	Node
+	// TODO: Is this needed?
+	expr()
 }
 
 type (
@@ -40,141 +75,35 @@ type (
 	Grouping struct {
 		group Expr
 	}
+
+	Variable struct {
+		name Token
+	}
 )
 
 func (e *BinaryExpr) Accept(v Visitor) any { return v(e) }
 func (e *UnaryExpr) Accept(v Visitor) any  { return v(e) }
 func (e *Literal) Accept(v Visitor) any    { return v(e) }
 func (e *Grouping) Accept(v Visitor) any   { return v(e) }
+func (e *Variable) Accept(v Visitor) any   { return v(e) }
 
-type runtimeError struct{ error }
-
-func runtimeErrf(format string, args ...any) {
-	panic(runtimeError{error: fmt.Errorf(format, args...)})
-}
-
-func mustBeNumbers(tok Token, args ...any) {
-	for _, o := range args {
-		if _, ok := o.(float64); !ok {
-			runtimeErrf("%q requires number arguments: %T", tok.Literal, o)
-		}
-	}
-}
-
-// EvalAST rooted at expr.
-// There are 4 types used for values: any, string, float64 & bool.
-func EvalAST(expr Expr) (v any, err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			if re, ok := r.(runtimeError); ok {
-				err = re.error
-			} else {
-				panic(r)
-			}
-		}
-	}()
-
-	v = expr.Accept(evalVisitor)
-
-	return
-}
-
-func evalVisitor(e Expr) any {
-	switch v := e.(type) {
-	case *Grouping:
-		return evalVisitor(v.group)
-
-	case *BinaryExpr:
-		l := evalVisitor(v.left)
-		r := evalVisitor(v.right)
-		switch v.op.Kind {
-		case EQUAL_EQUAL:
-			return isEqual(l, r)
-		case BANG_EQUAL:
-			return !isEqual(l, r)
-		}
-
-		switch v.op.Kind {
-		case PLUS:
-			mustBeNumbers(v.op, l, r)
-			return l.(float64) + r.(float64)
-		case DASH:
-			mustBeNumbers(v.op, l, r)
-			return l.(float64) - r.(float64)
-		case STAR:
-			mustBeNumbers(v.op, l, r)
-			return l.(float64) * r.(float64)
-		case SLASH:
-			mustBeNumbers(v.op, l, r)
-			return l.(float64) / r.(float64)
-
-		case GREATER:
-			mustBeNumbers(v.op, l, r)
-			return l.(float64) > r.(float64)
-		case GREATER_EQUAL:
-			mustBeNumbers(v.op, l, r)
-			return l.(float64) >= r.(float64)
-		case LESS:
-			mustBeNumbers(v.op, l, r)
-			return l.(float64) < r.(float64)
-		case LESS_EQUAL:
-			mustBeNumbers(v.op, l, r)
-			return l.(float64) <= r.(float64)
-		}
-		runtimeErrf("impossible binary")
-
-	case *UnaryExpr:
-		switch v.op.Kind {
-		case DASH:
-			r := evalVisitor(v.right)
-			mustBeNumbers(v.op, r)
-			if f, ok := r.(float64); ok {
-				return -f
-			}
-		case BANG:
-			vv := evalVisitor(v.right)
-			return !isTruthy(vv)
-		}
-		runtimeErrf("impossible unary")
-
-	case *Literal:
-		return v.val
-
-	default:
-		panic(fmt.Sprintf("unknown as node: %T :: %#v", e, e))
-	}
-
-	panic("unreachable")
-}
-
-func isEqual(a, b any) bool {
-	if a == nil && b == nil {
-		return true
-	}
-	if a == nil {
-		return false
-	}
-	return a == b // Does this work on interfaces?
-}
-
-// Literal false and nil are falsy.
-func isTruthy(v any) bool {
-	if v == nil {
-		return false
-	}
-	if b, ok := v.(bool); ok {
-		return b
-	}
-	return true
-}
+func (e *BinaryExpr) expr() {}
+func (e *UnaryExpr) expr()  {}
+func (e *Literal) expr()    {}
+func (e *Grouping) expr()   {}
+func (e *Variable) expr()   {}
 
 // PrintAST representation of Expr node.
-func PrintAST(expr Expr) string {
-	return expr.Accept(printVisitor).(string)
+func PrintAST(nodes ...Node) string {
+	sb := strings.Builder{}
+	for _, n := range nodes {
+		fmt.Fprintf(&sb, "%s\n", n.Accept(printVisitor).(string))
+	}
+	return strings.TrimSpace(sb.String())
 }
 
-func printVisitor(e Expr) any {
-	switch v := e.(type) {
+func printVisitor(node Node) any {
+	switch v := node.(type) {
 	case *BinaryExpr:
 		l := printVisitor(v.left)
 		r := printVisitor(v.right)
@@ -187,8 +116,16 @@ func printVisitor(e Expr) any {
 	case *Grouping:
 		g := printVisitor(v.group)
 		return parenthesize("group", g)
+
+	case *PrintStmt:
+		r := printVisitor(v.expr)
+		return parenthesize("print", r)
+	case *ExprStmt:
+		e := printVisitor(v.expr)
+		return parenthesize("expr", e)
+
 	default:
-		panic(fmt.Sprintf("unknown as node: %T :: %#v", e, e))
+		panic(fmt.Sprintf("unknown as node: %T :: %#v", node, node))
 	}
 }
 
@@ -199,9 +136,9 @@ func parenthesize(vs ...any) string {
 	sb := strings.Builder{}
 	fmt.Fprintf(&sb, "(")
 
-	fmt.Fprintf(&sb, "%s", vs[0])
+	fmt.Fprintf(&sb, "%v", vs[0])
 	for _, v := range vs[1:] {
-		fmt.Fprintf(&sb, " %s", v)
+		fmt.Fprintf(&sb, " %v", v)
 	}
 	fmt.Fprintf(&sb, ")")
 
