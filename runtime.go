@@ -154,6 +154,25 @@ func (i *Interpreter) execute(node Node) any {
 		}
 		runtimeErrf("impossible binary")
 
+	case *LogicalExpr:
+		left := i.execute(v.left)
+
+		// The value of left can short circuit the expression.
+		switch v.op.Kind {
+		case OR:
+			if isTruthy(left) {
+				return left
+			}
+		case AND:
+			if !isTruthy(left) {
+				return left
+			}
+		default:
+			panic("impossible logical")
+		}
+
+		return i.execute(v.right)
+
 	case *UnaryExpr:
 		switch v.op.Kind {
 		case DASH:

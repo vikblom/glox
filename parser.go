@@ -117,13 +117,33 @@ func (p *Parser) parseExpr() Expr {
 }
 
 func (p *Parser) parseAssign() Expr {
-	expr := p.parseEquality()
+	expr := p.parseOr()
 	if p.match(EQUAL) {
 		value := p.parseAssign()
 		if v, ok := expr.(*Variable); ok {
 			return &Assign{name: v.name, val: value}
 		}
 		runtimeErrf("Invalide assignment target %T", expr)
+	}
+	return expr
+}
+
+func (p *Parser) parseOr() Expr {
+	expr := p.parseAnd()
+	for p.match(OR) {
+		op := p.previous()
+		right := p.parseAnd()
+		expr = &LogicalExpr{op: op, left: expr, right: right}
+	}
+	return expr
+}
+
+func (p *Parser) parseAnd() Expr {
+	expr := p.parseEquality()
+	for p.match(AND) {
+		op := p.previous()
+		right := p.parseEquality()
+		expr = &LogicalExpr{op: op, left: expr, right: right}
 	}
 	return expr
 }

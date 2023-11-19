@@ -76,6 +76,11 @@ type (
 		left, right Expr
 	}
 
+	LogicalExpr struct {
+		op          Token
+		left, right Expr
+	}
+
 	UnaryExpr struct {
 		op    Token
 		right Expr
@@ -99,19 +104,21 @@ type (
 	}
 )
 
-func (e *BinaryExpr) Accept(v Visitor) any { return v(e) }
-func (e *UnaryExpr) Accept(v Visitor) any  { return v(e) }
-func (e *Literal) Accept(v Visitor) any    { return v(e) }
-func (e *Grouping) Accept(v Visitor) any   { return v(e) }
-func (e *Variable) Accept(v Visitor) any   { return v(e) }
-func (e *Assign) Accept(v Visitor) any     { return v(e) }
+func (e *BinaryExpr) Accept(v Visitor) any  { return v(e) }
+func (e *LogicalExpr) Accept(v Visitor) any { return v(e) }
+func (e *UnaryExpr) Accept(v Visitor) any   { return v(e) }
+func (e *Literal) Accept(v Visitor) any     { return v(e) }
+func (e *Grouping) Accept(v Visitor) any    { return v(e) }
+func (e *Variable) Accept(v Visitor) any    { return v(e) }
+func (e *Assign) Accept(v Visitor) any      { return v(e) }
 
-func (e *BinaryExpr) expr() {}
-func (e *UnaryExpr) expr()  {}
-func (e *Literal) expr()    {}
-func (e *Grouping) expr()   {}
-func (e *Variable) expr()   {}
-func (e *Assign) expr()     {}
+func (e *BinaryExpr) expr()  {}
+func (e *LogicalExpr) expr() {}
+func (e *UnaryExpr) expr()   {}
+func (e *Literal) expr()     {}
+func (e *Grouping) expr()    {}
+func (e *Variable) expr()    {}
+func (e *Assign) expr()      {}
 
 // PrintAST representation of Expr node.
 func PrintAST(nodes ...Node) string {
@@ -133,11 +140,17 @@ func printVisitor(node Node) any {
 		l := printVisitor(v.left)
 		r := printVisitor(v.right)
 		return parenthesize(v.op.Literal, l, r)
+	case *LogicalExpr:
+		l := printVisitor(v.left)
+		r := printVisitor(v.right)
+		return parenthesize(v.op.Literal, l, r)
 	case *UnaryExpr:
 		r := printVisitor(v.right)
 		return parenthesize(v.op.Literal, r)
 	case *Literal:
 		return fmt.Sprintf("%v", v.val) // TODO: Parenthesis?
+	case *Variable:
+		return v.name.Literal
 	case *Grouping:
 		g := printVisitor(v.group)
 		return parenthesize("group", g)
