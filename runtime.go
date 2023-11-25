@@ -227,6 +227,12 @@ func (i *Interpreter) execute(node Node) any {
 		}
 		return nil
 
+	case *WhileStmt:
+		for isTruthy(i.execute(v.cond)) {
+			i.execute(v.body)
+		}
+		return nil
+
 	default:
 		panic(fmt.Sprintf("unknown node: %T :: %#v", node, node))
 	}

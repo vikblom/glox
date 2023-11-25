@@ -69,6 +69,9 @@ func (p *Parser) parseStmt() Stmt {
 	if p.match(PRINT) {
 		return p.parsePrintStmt()
 	}
+	if p.match(WHILE) {
+		return p.parseWhileStmt()
+	}
 	if p.match(BRACE_LEFT) {
 		return p.parseBlockStmt()
 	}
@@ -95,6 +98,14 @@ func (p *Parser) parsePrintStmt() Stmt {
 	val := p.parseExpr()
 	p.consume(SEMICOLON, "Expected terminating ';' after print value.")
 	return &PrintStmt{expr: val}
+}
+
+func (p *Parser) parseWhileStmt() Stmt {
+	p.consume(PAREN_LEFT, "Expected opening '(' for if condition.")
+	cond := p.parseExpr()
+	p.consume(PAREN_RIGHT, "Expected closing ')' for if condition.")
+	body := p.parseStmt()
+	return &WhileStmt{cond: cond, body: body}
 }
 
 func (p *Parser) parseBlockStmt() Stmt {

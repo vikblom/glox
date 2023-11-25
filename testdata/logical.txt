@@ -1,0 +1,7 @@
+-- src.lox --
+print "hi" or 2;
+print nil or "yes";
+
+-- stdout --
+"hi"
+"yes"

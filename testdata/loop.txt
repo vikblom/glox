@@ -1,0 +1,11 @@
+-- src.lox --
+var a = 0;
+while (a < 3) {
+      print a;
+      a = a + 1;
+}
+
+-- stdout --
+0
+1
+2
