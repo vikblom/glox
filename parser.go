@@ -72,6 +72,9 @@ func (p *Parser) parseStmt() Stmt {
 	if p.match(WHILE) {
 		return p.parseWhileStmt()
 	}
+	if p.match(FOR) {
+		return p.parseForStmt()
+	}
 	if p.match(BRACE_LEFT) {
 		return p.parseBlockStmt()
 	}
@@ -101,10 +104,70 @@ func (p *Parser) parsePrintStmt() Stmt {
 }
 
 func (p *Parser) parseWhileStmt() Stmt {
-	p.consume(PAREN_LEFT, "Expected opening '(' for if condition.")
+	p.consume(PAREN_LEFT, "Expected opening '(' for while condition.")
 	cond := p.parseExpr()
-	p.consume(PAREN_RIGHT, "Expected closing ')' for if condition.")
+	p.consume(PAREN_RIGHT, "Expected closing ')' for while condition.")
 	body := p.parseStmt()
+	return &WhileStmt{cond: cond, body: body}
+}
+
+func (p *Parser) parseForStmt() Stmt {
+	p.consume(PAREN_LEFT, "Expected opening '(' after 'for'.")
+
+	var init Stmt
+	switch {
+	case p.match(SEMICOLON):
+		// Skipped initializer.
+	case p.match(VAR):
+		init = p.parseVarStmt()
+	default:
+		init = p.parseExprStmt()
+	}
+
+	var cond Expr
+	if p.peek().Kind != SEMICOLON {
+		cond = p.parseExpr()
+	} else {
+		cond = &Literal{val: true}
+	}
+	p.consume(SEMICOLON, "Expected ';' after for loop condition.")
+
+	var incr Expr
+	if p.peek().Kind != PAREN_RIGHT {
+		incr = p.parseExpr()
+	}
+	p.consume(PAREN_RIGHT, "Expected ')' after for loop incrementor.")
+
+	body := p.parseStmt()
+
+	// De-sugar into a while loop:
+	// {
+	//    *init*
+	//    while (*cond*) {
+	//        *body*
+	//        *incr*
+	//    }
+	// }
+	if incr != nil {
+		body = &BlockStmt{
+			statements: []Stmt{
+				body,
+				&ExprStmt{expr: incr},
+			},
+		}
+	}
+
+	body = &WhileStmt{cond: cond, body: body}
+
+	if init != nil {
+		body = &BlockStmt{
+			statements: []Stmt{
+				init,
+				body,
+			},
+		}
+	}
+
 	return &WhileStmt{cond: cond, body: body}
 }
 

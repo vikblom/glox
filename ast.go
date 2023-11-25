@@ -109,6 +109,12 @@ type (
 		name Token
 		val  Expr
 	}
+
+	Call struct {
+		callee Expr
+		paren  Token
+		args   []Expr
+	}
 )
 
 func (e *BinaryExpr) Accept(v Visitor) any  { return v(e) }
@@ -118,6 +124,7 @@ func (e *Literal) Accept(v Visitor) any     { return v(e) }
 func (e *Grouping) Accept(v Visitor) any    { return v(e) }
 func (e *Variable) Accept(v Visitor) any    { return v(e) }
 func (e *Assign) Accept(v Visitor) any      { return v(e) }
+func (e *Call) Accept(v Visitor) any        { return v(e) }
 
 func (e *BinaryExpr) expr()  {}
 func (e *LogicalExpr) expr() {}
@@ -126,6 +133,7 @@ func (e *Literal) expr()     {}
 func (e *Grouping) expr()    {}
 func (e *Variable) expr()    {}
 func (e *Assign) expr()      {}
+func (e *Call) expr()        {}
 
 // PrintAST representation of Expr node.
 func PrintAST(nodes ...Node) string {
