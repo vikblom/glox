@@ -5,10 +5,39 @@ import (
 	"io"
 )
 
+type callable interface {
+	call(i *Interpreter, args []any) any
+	arity() int
+}
+
+type function struct {
+	decl *FuncStmt
+}
+
+func (f *function) arity() int {
+	return len(f.decl.params)
+}
+
+func (f *function) call(i *Interpreter, args []any) any {
+	// Each call inherits globals/builtints etc. but is otherwise
+	// independent.
+	env := i.global.Fork()
+	for i, param := range f.decl.params {
+		env.define(param.Literal, args[i])
+	}
+
+	i.executeBlock(f.decl.body, env)
+	return nil
+}
+
+func (f *function) String() string {
+	return fmt.Sprintf("<fn %s>", f.decl.name.Literal)
+}
+
 type runtimeError struct{ error }
 
 func runtimeErrf(format string, args ...any) {
-	panic(runtimeError{error: fmt.Errorf(format, args...)})
+	panic(runtimeError{error: fmt.Errorf("RUNTIME ERROR: "+format, args...)})
 }
 
 func mustBeNumbers(tok Token, args ...any) {
@@ -71,14 +100,21 @@ func (e *Env) retrieve(name string) any {
 }
 
 type Interpreter struct {
-	out io.Writer
-	env *Env
+	out    io.Writer
+	global *Env
+	scope  *Env
 }
 
 func NewInterpreter(out io.Writer) *Interpreter {
+	g := NewEnv()
+	g.define("clock", &builtinClock{})
+
 	return &Interpreter{
 		out: out,
-		env: NewEnv(),
+		// Fixed ref to top level scope.
+		global: g,
+		// Current scope, will change as we execute.
+		scope: g,
 	}
 }
 
@@ -191,12 +227,31 @@ func (i *Interpreter) execute(node Node) any {
 		return v.val
 
 	case *Variable:
-		return i.env.retrieve(v.name.Literal)
+		return i.scope.retrieve(v.name.Literal)
 
 	case *Assign:
 		val := i.execute(v.val)
-		i.env.assign(v.name.Literal, val)
+		i.scope.assign(v.name.Literal, val)
 		return val
+
+	case *Call:
+		callee := i.execute(v.callee)
+
+		args := []any{}
+		for _, a := range v.args {
+			args = append(args, i.execute(a))
+		}
+
+		callable, ok := callee.(callable)
+		if !ok {
+			runtimeErrf("Not callable %T", callee)
+			return nil
+		}
+		if callable.arity() != len(args) {
+			runtimeErrf("Expected %d arguments but got %d", callable.arity(), len(args))
+			return nil
+		}
+		return callable.call(i, args)
 
 	case *PrintStmt:
 		val := i.execute(v.expr)
@@ -207,16 +262,23 @@ func (i *Interpreter) execute(node Node) any {
 		_ = i.execute(v.expr)
 		return nil
 
+	case *FuncStmt:
+		fn := &function{
+			decl: v,
+		}
+		i.scope.define(v.name.Literal, fn)
+		return nil
+
 	case *VarStmt:
 		var val any
 		if v.init != nil {
 			val = i.execute(v.init)
 		}
-		i.env.define(v.name.Literal, val)
+		i.scope.define(v.name.Literal, val)
 		return nil
 
 	case *BlockStmt:
-		i.executeBlock(v)
+		i.executeBlock(v.statements, i.scope.Fork())
 		return nil
 
 	case *IfStmt:
@@ -240,12 +302,14 @@ func (i *Interpreter) execute(node Node) any {
 	panic("unreachable")
 }
 
-func (i *Interpreter) executeBlock(block *BlockStmt) {
-	prev := i.env
-	i.env = i.env.Fork()
-	defer func() { i.env = prev }()
+// executeBlock in the given env.
+// Used when entering a block, function etc.
+func (i *Interpreter) executeBlock(statements []Stmt, env *Env) {
+	prev := i.scope
+	defer func() { i.scope = prev }()
 
-	for _, s := range block.statements {
+	i.scope = env
+	for _, s := range statements {
 		i.execute(s)
 	}
 }

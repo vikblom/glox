@@ -1,0 +1,15 @@
+-- src.lox --
+fun count(n) {
+    if (n > 1)
+       count(n - 1);
+    print n;
+}
+
+print count;
+count(3);
+
+-- stdout --
+<fn count>
+1
+2
+3

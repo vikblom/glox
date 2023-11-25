@@ -25,6 +25,8 @@ func TestPrinter(t *testing.T) {
 		// or binds lower than and.
 		{src: `if (a and b or c) 1;`, want: `(if (or (and a b) c) then (expr 1))`},
 		{src: `if (a or b and c) 1;`, want: `(if (or a (and b c)) then (expr 1))`},
+
+		{src: `sum(1,2,3);`, want: `(expr (call sum 1 2 3))`},
 	}
 
 	for _, tt := range tests {

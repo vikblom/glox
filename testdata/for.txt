@@ -1,0 +1,19 @@
+-- src.lox --
+var a = 0;
+var temp;
+
+for (var b = 1; a < 14; b = temp + b) {
+    print a;
+    temp = a;
+    a = b;
+}
+
+-- stdout --
+0
+1
+1
+2
+3
+5
+8
+13

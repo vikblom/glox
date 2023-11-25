@@ -37,6 +37,13 @@ type (
 		expr Expr
 	}
 
+	FuncStmt struct {
+		name   Token
+		params []Token
+		// Does this need to be a slice?
+		body []Stmt
+	}
+
 	VarStmt struct {
 		name Token
 		init Expr
@@ -59,6 +66,7 @@ type (
 
 func (s *PrintStmt) Accept(v Visitor) any { return v(s) }
 func (s *ExprStmt) Accept(v Visitor) any  { return v(s) }
+func (s *FuncStmt) Accept(v Visitor) any  { return v(s) }
 func (s *VarStmt) Accept(v Visitor) any   { return v(s) }
 func (s *BlockStmt) Accept(v Visitor) any { return v(s) }
 func (s *IfStmt) Accept(v Visitor) any    { return v(s) }
@@ -66,6 +74,7 @@ func (s *WhileStmt) Accept(v Visitor) any { return v(s) }
 
 func (s *PrintStmt) Stmt() Expr { return s.expr }
 func (s *ExprStmt) Stmt() Expr  { return s.expr }
+func (s *FuncStmt) Stmt() Expr  { return nil }
 func (s *VarStmt) Stmt() Expr   { return s.init }
 func (s *BlockStmt) Stmt() Expr { return nil }
 func (s *IfStmt) Stmt() Expr    { return nil }
@@ -196,6 +205,12 @@ func printVisitor(node Node) any {
 		vs = append(vs, "then", printVisitor(v.thenBranch))
 		if v.elseBranch != nil {
 			vs = append(vs, "else", printVisitor(v.elseBranch))
+		}
+		return parenthesize(vs...)
+	case *Call:
+		vs := []any{"call", printVisitor(v.callee)}
+		for _, s := range v.args {
+			vs = append(vs, printVisitor(s))
 		}
 		return parenthesize(vs...)
 	default:
