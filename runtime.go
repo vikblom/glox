@@ -11,7 +11,8 @@ type callable interface {
 }
 
 type function struct {
-	decl *FuncStmt
+	decl    *FuncStmt
+	closure *Env
 }
 
 func (f *function) arity() int {
@@ -29,9 +30,9 @@ func (f *function) call(i *Interpreter, args []any) (ret any) {
 			}
 		}
 	}()
-	// Each call inherits globals/builtints etc. but is otherwise
-	// independent.
-	env := i.global.Fork()
+	// Each function captures the environment where it was _declared_.
+	// Closing over variables there.
+	env := f.closure.Fork()
 	for i, param := range f.decl.params {
 		env.define(param.Literal, args[i])
 	}
@@ -277,7 +278,8 @@ func (i *Interpreter) execute(node Node) any {
 
 	case *FuncStmt:
 		fn := &function{
-			decl: v,
+			decl:    v,
+			closure: i.scope,
 		}
 		i.scope.define(v.name.Literal, fn)
 		return nil
