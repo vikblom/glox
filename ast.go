@@ -62,23 +62,30 @@ type (
 		cond Expr
 		body Stmt
 	}
+
+	ReturnStmt struct {
+		keyword Token
+		value   Expr
+	}
 )
 
-func (s *PrintStmt) Accept(v Visitor) any { return v(s) }
-func (s *ExprStmt) Accept(v Visitor) any  { return v(s) }
-func (s *FuncStmt) Accept(v Visitor) any  { return v(s) }
-func (s *VarStmt) Accept(v Visitor) any   { return v(s) }
-func (s *BlockStmt) Accept(v Visitor) any { return v(s) }
-func (s *IfStmt) Accept(v Visitor) any    { return v(s) }
-func (s *WhileStmt) Accept(v Visitor) any { return v(s) }
+func (s *PrintStmt) Accept(v Visitor) any  { return v(s) }
+func (s *ExprStmt) Accept(v Visitor) any   { return v(s) }
+func (s *FuncStmt) Accept(v Visitor) any   { return v(s) }
+func (s *VarStmt) Accept(v Visitor) any    { return v(s) }
+func (s *BlockStmt) Accept(v Visitor) any  { return v(s) }
+func (s *IfStmt) Accept(v Visitor) any     { return v(s) }
+func (s *WhileStmt) Accept(v Visitor) any  { return v(s) }
+func (s *ReturnStmt) Accept(v Visitor) any { return v(s) }
 
-func (s *PrintStmt) Stmt() Expr { return s.expr }
-func (s *ExprStmt) Stmt() Expr  { return s.expr }
-func (s *FuncStmt) Stmt() Expr  { return nil }
-func (s *VarStmt) Stmt() Expr   { return s.init }
-func (s *BlockStmt) Stmt() Expr { return nil }
-func (s *IfStmt) Stmt() Expr    { return nil }
-func (s *WhileStmt) Stmt() Expr { return nil }
+func (s *PrintStmt) Stmt() Expr  { return s.expr }
+func (s *ExprStmt) Stmt() Expr   { return s.expr }
+func (s *FuncStmt) Stmt() Expr   { return nil }
+func (s *VarStmt) Stmt() Expr    { return s.init }
+func (s *BlockStmt) Stmt() Expr  { return nil }
+func (s *IfStmt) Stmt() Expr     { return nil }
+func (s *WhileStmt) Stmt() Expr  { return nil }
+func (s *ReturnStmt) Stmt() Expr { return nil }
 
 type Expr interface {
 	Node

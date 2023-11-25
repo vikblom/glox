@@ -18,7 +18,17 @@ func (f *function) arity() int {
 	return len(f.decl.params)
 }
 
-func (f *function) call(i *Interpreter, args []any) any {
+func (f *function) call(i *Interpreter, args []any) (ret any) {
+	// Using panics to unwind the stack on return...
+	defer func() {
+		if r := recover(); r != nil {
+			if re, ok := r.(returnValue); ok {
+				ret = re.any
+			} else {
+				panic(r)
+			}
+		}
+	}()
 	// Each call inherits globals/builtints etc. but is otherwise
 	// independent.
 	env := i.global.Fork()
@@ -98,6 +108,9 @@ func (e *Env) retrieve(name string) any {
 	runtimeErrf("undefined %q", name)
 	return nil
 }
+
+// returnValue by panic...
+type returnValue struct{ any }
 
 type Interpreter struct {
 	out    io.Writer
@@ -294,6 +307,13 @@ func (i *Interpreter) execute(node Node) any {
 			i.execute(v.body)
 		}
 		return nil
+
+	case *ReturnStmt:
+		var value any
+		if v.value != nil {
+			value = i.execute(v.value)
+		}
+		panic(returnValue{value})
 
 	default:
 		panic(fmt.Sprintf("unknown node: %T :: %#v", node, node))

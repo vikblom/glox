@@ -98,6 +98,9 @@ func (p *Parser) parseStmt() Stmt {
 	if p.match(PRINT) {
 		return p.parsePrintStmt()
 	}
+	if p.match(RETURN) {
+		return p.parseReturnStmt()
+	}
 	if p.match(WHILE) {
 		return p.parseWhileStmt()
 	}
@@ -130,6 +133,16 @@ func (p *Parser) parsePrintStmt() Stmt {
 	val := p.parseExpr()
 	p.consume(SEMICOLON, "Expected terminating ';' after print value.")
 	return &PrintStmt{expr: val}
+}
+
+func (p *Parser) parseReturnStmt() Stmt {
+	keyword := p.previous()
+	var value Expr
+	if !p.check(SEMICOLON) {
+		value = p.parseExpr()
+	}
+	p.consume(SEMICOLON, "Expected terminating ';' after return value.")
+	return &ReturnStmt{keyword: keyword, value: value}
 }
 
 func (p *Parser) parseWhileStmt() Stmt {
