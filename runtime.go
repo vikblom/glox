@@ -65,6 +65,7 @@ func (f *LoxFunction) bind(inst *LoxInstance) *LoxFunction {
 type LoxClass struct {
 	name    string
 	methods map[string]*LoxFunction
+	super   *LoxClass
 }
 
 func (c *LoxClass) arity() int {
@@ -95,6 +96,9 @@ func (c *LoxClass) findMethod(name string) *LoxFunction {
 	m, ok := c.methods[name]
 	if ok {
 		return m
+	}
+	if c.super != nil {
+		return c.super.findMethod(name)
 	}
 	return nil
 }
@@ -407,6 +411,25 @@ func (i *Interpreter) execute(node Node) any {
 	case *ThisExpr:
 		return i.lookupVariable(v.keyword, v)
 
+	case *SuperExpr:
+		dist := i.locals[v]
+		super, ok := i.scope.up(dist).get("super").(*LoxClass)
+		if !ok {
+			runtimeErrf("not a class")
+			return nil
+		}
+		// We know the instance is just before where super is hooked on.
+		obj, ok := i.scope.up(dist - 1).get("this").(*LoxInstance)
+		if !ok {
+			runtimeErrf("not an instance")
+			return nil
+		}
+		method := super.findMethod(v.method.Literal)
+		if method == nil {
+			runtimeErrf("Undefined property %q", v.method.Literal)
+		}
+		return method.bind(obj)
+
 	case *PrintStmt:
 		val := i.execute(v.expr)
 		fmt.Fprintf(i.out, "%v\n", val)
@@ -459,7 +482,23 @@ func (i *Interpreter) execute(node Node) any {
 		panic(returnValue{value})
 
 	case *ClassStmt:
+		var super *LoxClass
+		if v.super != nil {
+			inherited, ok := i.execute(v.super).(*LoxClass)
+			if !ok {
+				runtimeErrf("Superclass must be a class.")
+				return nil
+			}
+			super = inherited
+		}
+
 		i.scope.define(v.name.Literal, nil)
+
+		if super != nil {
+			i.scope = i.scope.Fork()
+			i.scope.define("super", super)
+			defer func() { i.scope = i.scope.enclosing }()
+		}
 
 		methods := map[string]*LoxFunction{}
 		for _, m := range v.methods {
@@ -477,6 +516,7 @@ func (i *Interpreter) execute(node Node) any {
 		class := &LoxClass{
 			name:    v.name.Literal,
 			methods: methods,
+			super:   super,
 		}
 		i.scope.assign(v.name.Literal, class)
 		return nil
@@ -535,6 +575,7 @@ type classType int
 const (
 	classNone classType = iota
 	classClass
+	classSub
 )
 
 type Resolver struct {
@@ -627,6 +668,17 @@ func (r *Resolver) resolve(node Node) any {
 		}
 		r.resolveLocal(v, v.keyword)
 
+	case *SuperExpr:
+		if r.currentClass == classNone {
+			runtimeErrf("Can't use 'super' outside of class.")
+			return nil
+		}
+		if r.currentClass != classSub {
+			runtimeErrf("Can't use 'super' in a class with no superclass.")
+			return nil
+		}
+		r.resolveLocal(v, v.keyword)
+
 	case *PrintStmt:
 		r.resolve(v.expr)
 
@@ -653,7 +705,6 @@ func (r *Resolver) resolve(node Node) any {
 			if r.currentFunc == funcInit {
 				runtimeErrf("Cannot return a value from initializer.")
 				return nil
-				return nil
 			}
 			r.resolve(v.value)
 		}
@@ -665,6 +716,18 @@ func (r *Resolver) resolve(node Node) any {
 
 		r.declare(v.name)
 		r.define(v.name)
+
+		if v.super != nil {
+			if v.name.Literal == v.super.name.Literal {
+				runtimeErrf("A class can't inherit from itself.")
+				return nil
+			}
+			r.currentClass = classSub // Already reset by defer.
+			r.resolve(v.super)
+
+			r.beginScope()
+			r.scopes[len(r.scopes)-1]["super"] = true
+		}
 
 		r.beginScope()
 		r.scopes[len(r.scopes)-1]["this"] = true
@@ -679,6 +742,9 @@ func (r *Resolver) resolve(node Node) any {
 		}
 
 		r.endScope()
+		if v.super != nil {
+			r.endScope()
+		}
 
 	default:
 		panic(fmt.Sprintf("unknown node: %T :: %#v", node, node))

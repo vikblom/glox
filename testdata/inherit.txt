@@ -1,0 +1,18 @@
+-- src.lox --
+class Root {
+    hi() {
+        print("root hi");
+    }
+}
+
+class Leaf < Root {
+
+}
+
+var r = Leaf();
+print r;
+r.hi();
+
+-- stdout --
+<instance Leaf>
+"root hi"

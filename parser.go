@@ -96,6 +96,13 @@ func (p *Parser) parseVarStmt() Stmt {
 
 func (p *Parser) parseClassStmt() Stmt {
 	name := p.consume(IDENTIFIER, "Expected class name.")
+
+	var super *Variable
+	if p.match(LESS) {
+		p.consume(IDENTIFIER, "Expected superclass name.")
+		super = &Variable{name: p.previous()}
+	}
+
 	p.consume(BRACE_LEFT, "Expected '{' before class body.")
 	methods := []Stmt{}
 	for !p.check(BRACE_RIGHT) && !p.isAtEnd() {
@@ -103,7 +110,7 @@ func (p *Parser) parseClassStmt() Stmt {
 
 	}
 	p.consume(BRACE_RIGHT, "Expected '}' afterclass body.")
-	return &ClassStmt{name: name, methods: methods}
+	return &ClassStmt{name: name, super: super, methods: methods}
 }
 
 func (p *Parser) parseStmt() Stmt {
@@ -399,6 +406,11 @@ func (p *Parser) parsePrimary() Expr {
 		return &Variable{name: p.previous()}
 	case p.match(THIS):
 		return &ThisExpr{keyword: p.previous()}
+	case p.match(SUPER):
+		keyword := p.previous()
+		p.consume(DOT, "Expected '.' after super keyword.")
+		method := p.consume(IDENTIFIER, "Expected method name for super invocation.")
+		return &SuperExpr{keyword: keyword, method: method}
 	default:
 		at := p.peek()
 		p.error(at.Line, "Expected expression")
