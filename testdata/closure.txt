@@ -1,0 +1,19 @@
+-- src.lox --
+fun makeCounter() {
+    var i = 0;
+    fun count() {
+        i = i + 1;
+        return i;
+    }
+    return count;
+}
+
+var counter = makeCounter();
+print counter();
+print counter();
+print counter();
+
+-- stdout --
+1
+2
+3

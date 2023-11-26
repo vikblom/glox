@@ -96,18 +96,29 @@ func (e *Env) assign(name string, val any) {
 	runtimeErrf("undefined %q", name)
 }
 
-func (e *Env) retrieve(name string) any {
+func (i *Interpreter) lookupVariable(name Token, expr Expr) any {
+	distance, ok := i.locals[expr]
+	if !ok {
+		return i.global.get(name.Literal)
+	}
+	return i.scope.up(distance).get(name.Literal)
+}
+
+func (e *Env) get(name string) any {
 	v, ok := e.vars[name]
-	if ok {
-		return v
+	if !ok {
+		runtimeErrf("undefined %q", name)
+		return nil
 	}
+	return v
+}
 
-	if e.enclosing != nil {
-		return e.enclosing.retrieve(name)
+func (e *Env) up(distance int) *Env {
+	env := e
+	for i := 0; i < distance; i++ {
+		env = env.enclosing
 	}
-
-	runtimeErrf("undefined %q", name)
-	return nil
+	return env
 }
 
 // returnValue by panic...
@@ -117,6 +128,9 @@ type Interpreter struct {
 	out    io.Writer
 	global *Env
 	scope  *Env
+
+	// Static analysis.
+	locals map[Expr]int
 }
 
 func NewInterpreter(out io.Writer) *Interpreter {
@@ -129,7 +143,13 @@ func NewInterpreter(out io.Writer) *Interpreter {
 		global: g,
 		// Current scope, will change as we execute.
 		scope: g,
+
+		locals: map[Expr]int{},
 	}
+}
+
+func (i *Interpreter) resolve(expr Expr, depth int) {
+	i.locals[expr] = depth
 }
 
 func (i *Interpreter) Interpret(stmts []Stmt) (err error) {
@@ -142,6 +162,13 @@ func (i *Interpreter) Interpret(stmts []Stmt) (err error) {
 			}
 		}
 	}()
+
+	// Statically analyze variable decl/define.
+	// TODO: Move somewhere outside?
+	r := NewResolver(i)
+	for _, s := range stmts {
+		r.resolve(s)
+	}
 
 	for _, s := range stmts {
 		_, err := i.EvalAST(s)
@@ -241,11 +268,18 @@ func (i *Interpreter) execute(node Node) any {
 		return v.val
 
 	case *Variable:
-		return i.scope.retrieve(v.name.Literal)
+		return i.lookupVariable(v.name, v)
 
 	case *Assign:
 		val := i.execute(v.val)
-		i.scope.assign(v.name.Literal, val)
+
+		dist, ok := i.locals[v] // FIXME: Must this be the Expr?
+		if !ok {
+			i.global.assign(v.name.Literal, val)
+		} else {
+			i.scope.up(dist).assign(v.name.Literal, val)
+		}
+
 		return val
 
 	case *Call:
@@ -355,4 +389,189 @@ func isTruthy(v any) bool {
 		return b
 	}
 	return true
+}
+
+type funcType int
+
+const (
+	funcNone funcType = iota
+	funcFunc
+)
+
+type Resolver struct {
+	i      *Interpreter
+	scopes []map[string]bool
+
+	currentFunc funcType
+}
+
+func NewResolver(i *Interpreter) *Resolver {
+	return &Resolver{
+		i: i,
+		// FIXME: Global scope?
+		scopes: []map[string]bool{},
+
+		currentFunc: funcNone,
+	}
+}
+
+// execute node using this AST visitor function.
+func (r *Resolver) resolve(node Node) any {
+	switch v := node.(type) {
+	case *BlockStmt:
+		r.beginScope()
+		for _, s := range v.statements {
+			r.resolve(s)
+		}
+		r.endScope()
+		return nil
+
+	case *VarStmt:
+		r.declare(v.name)
+		if v.init != nil {
+			r.resolve(v.init)
+		}
+		r.define(v.name)
+		return nil
+
+	case *Variable:
+		if len(r.scopes) > 0 {
+			sc := r.scopes[len(r.scopes)-1]
+			if defined, ok := sc[v.name.Literal]; ok && !defined {
+				runtimeErrf("Cannot read local variable in its own initializer.")
+				return nil
+			}
+		}
+		r.resolveLocal(v, v.name)
+		return nil
+
+	case *Assign:
+		r.resolve(v.val)
+		r.resolveLocal(v, v.name)
+		return nil
+
+	case *FuncStmt:
+		r.declare(v.name)
+		r.define(v.name)
+		r.resolveFunction(v, funcFunc)
+		return nil
+
+	case *Grouping:
+		r.resolve(v.group)
+		return nil
+
+	case *BinaryExpr:
+		r.resolve(v.left)
+		r.resolve(v.right)
+		return nil
+
+	case *LogicalExpr:
+		r.resolve(v.left)
+		r.resolve(v.right)
+		return nil
+
+	case *UnaryExpr:
+		r.resolve(v.right)
+		return nil
+
+	case *Literal:
+		return nil
+
+	case *Call:
+		r.resolve(v.callee)
+		for _, arg := range v.args {
+			r.resolve(arg)
+		}
+		return nil
+
+	case *PrintStmt:
+		r.resolve(v.expr)
+		return nil
+
+	case *ExprStmt:
+		r.resolve(v.expr)
+		return nil
+
+	case *IfStmt:
+		r.resolve(v.cond)
+		r.resolve(v.thenBranch)
+		if v.elseBranch != nil {
+			r.resolve(v.elseBranch)
+		}
+		return nil
+
+	case *WhileStmt:
+		r.resolve(v.cond)
+		r.resolve(v.body)
+		return nil
+
+	case *ReturnStmt:
+		if r.currentFunc == funcNone {
+			runtimeErrf("Can't return from top-level code")
+			return nil
+		}
+		if v.value != nil {
+			r.resolve(v.value)
+		}
+		return nil
+
+	default:
+		panic(fmt.Sprintf("unknown node: %T :: %#v", node, node))
+	}
+}
+
+func (r *Resolver) beginScope() {
+	r.scopes = append(r.scopes, map[string]bool{})
+}
+
+func (r *Resolver) endScope() {
+	r.scopes = r.scopes[:len(r.scopes)-1]
+}
+
+// declare in innermost scope.
+func (r *Resolver) declare(name Token) {
+	if len(r.scopes) == 0 {
+		return
+	}
+	sc := r.scopes[len(r.scopes)-1]
+	if _, ok := sc[name.Literal]; ok {
+		runtimeErrf("Already a variable with this name in this scope")
+		return
+	}
+
+	sc[name.Literal] = false
+}
+
+// define in innermost scope.
+func (r *Resolver) define(name Token) {
+	if len(r.scopes) == 0 {
+		return
+	}
+	r.scopes[len(r.scopes)-1][name.Literal] = true
+}
+
+func (r *Resolver) resolveLocal(expr Expr, name Token) {
+	for i := len(r.scopes) - 1; i >= 0; i-- {
+		sc := r.scopes[i]
+		if _, ok := sc[name.Literal]; ok {
+			r.i.resolve(expr, len(r.scopes)-1-i)
+			return
+		}
+	}
+}
+
+func (r *Resolver) resolveFunction(stmt *FuncStmt, kind funcType) {
+	enclosing := r.currentFunc
+	r.currentFunc = kind
+	defer func() { r.currentFunc = enclosing }()
+
+	r.beginScope()
+	for _, p := range stmt.params {
+		r.declare(p)
+		r.define(p)
+	}
+	for _, b := range stmt.body {
+		r.resolve(b)
+	}
+	r.endScope()
 }
