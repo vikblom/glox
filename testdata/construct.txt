@@ -1,0 +1,14 @@
+-- src.lox --
+class C {
+    init() {
+        this.a = 1;
+        return;
+        this.a = 2;
+    }
+}
+
+var c = C();
+print c.a;
+
+-- stdout --
+1

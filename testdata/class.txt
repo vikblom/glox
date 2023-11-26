@@ -1,0 +1,30 @@
+-- src.lox --
+class Foo {
+    getter() {
+        return "foo";
+    }
+
+    invoke() {
+        print "invoker!";
+    }
+}
+print Foo;
+
+var foo = Foo();
+print foo;
+
+foo.bar = 1;
+var baz = foo.bar + 2;
+
+print baz;
+
+foo.invoke();
+var f = foo.invoke;
+f();
+
+-- stdout --
+<class Foo>
+<instance Foo>
+3
+"invoker!"
+"invoker!"

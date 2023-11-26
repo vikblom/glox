@@ -67,6 +67,11 @@ type (
 		keyword Token
 		value   Expr
 	}
+
+	ClassStmt struct {
+		name    Token
+		methods []Stmt
+	}
 )
 
 func (s *PrintStmt) Accept(v Visitor) any  { return v(s) }
@@ -77,6 +82,7 @@ func (s *BlockStmt) Accept(v Visitor) any  { return v(s) }
 func (s *IfStmt) Accept(v Visitor) any     { return v(s) }
 func (s *WhileStmt) Accept(v Visitor) any  { return v(s) }
 func (s *ReturnStmt) Accept(v Visitor) any { return v(s) }
+func (s *ClassStmt) Accept(v Visitor) any  { return v(s) }
 
 func (s *PrintStmt) Stmt() Expr  { return s.expr }
 func (s *ExprStmt) Stmt() Expr   { return s.expr }
@@ -86,6 +92,7 @@ func (s *BlockStmt) Stmt() Expr  { return nil }
 func (s *IfStmt) Stmt() Expr     { return nil }
 func (s *WhileStmt) Stmt() Expr  { return nil }
 func (s *ReturnStmt) Stmt() Expr { return nil }
+func (s *ClassStmt) Stmt() Expr  { return nil }
 
 type Expr interface {
 	Node
@@ -131,6 +138,22 @@ type (
 		paren  Token
 		args   []Expr
 	}
+
+	GetExpr struct {
+		object Expr
+		name   Token
+	}
+
+	SetExpr struct {
+		// object.name = value
+		object Expr
+		name   Token
+		value  Expr
+	}
+
+	ThisExpr struct {
+		keyword Token
+	}
 )
 
 func (e *BinaryExpr) Accept(v Visitor) any  { return v(e) }
@@ -141,6 +164,9 @@ func (e *Grouping) Accept(v Visitor) any    { return v(e) }
 func (e *Variable) Accept(v Visitor) any    { return v(e) }
 func (e *Assign) Accept(v Visitor) any      { return v(e) }
 func (e *Call) Accept(v Visitor) any        { return v(e) }
+func (e *GetExpr) Accept(v Visitor) any     { return v(e) }
+func (e *SetExpr) Accept(v Visitor) any     { return v(e) }
+func (e *ThisExpr) Accept(v Visitor) any    { return v(e) }
 
 func (e *BinaryExpr) expr()  {}
 func (e *LogicalExpr) expr() {}
@@ -150,6 +176,9 @@ func (e *Grouping) expr()    {}
 func (e *Variable) expr()    {}
 func (e *Assign) expr()      {}
 func (e *Call) expr()        {}
+func (e *GetExpr) expr()     {}
+func (e *SetExpr) expr()     {}
+func (e *ThisExpr) expr()    {}
 
 // PrintAST representation of Expr node.
 func PrintAST(nodes ...Node) string {

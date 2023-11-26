@@ -1,0 +1,16 @@
+-- src.lox --
+class Foo {
+    set(n) {
+        this.n = n;
+    }
+    get() {
+        return this.n;
+    }
+}
+
+var f = Foo();
+f.set(5);
+print f.get();
+
+-- stdout --
+5

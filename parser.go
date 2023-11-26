@@ -51,6 +51,9 @@ func (p *Parser) parseDecl() Stmt {
 	if p.match(VAR) {
 		return p.parseVarStmt()
 	}
+	if p.match(CLASS) {
+		return p.parseClassStmt()
+	}
 	return p.parseStmt()
 }
 
@@ -89,6 +92,18 @@ func (p *Parser) parseVarStmt() Stmt {
 
 	p.consume(SEMICOLON, "Expected terminating ';' after print value.")
 	return &VarStmt{name: name, init: init}
+}
+
+func (p *Parser) parseClassStmt() Stmt {
+	name := p.consume(IDENTIFIER, "Expected class name.")
+	p.consume(BRACE_LEFT, "Expected '{' before class body.")
+	methods := []Stmt{}
+	for !p.check(BRACE_RIGHT) && !p.isAtEnd() {
+		methods = append(methods, p.parseFuncStmt("method"))
+
+	}
+	p.consume(BRACE_RIGHT, "Expected '}' afterclass body.")
+	return &ClassStmt{name: name, methods: methods}
 }
 
 func (p *Parser) parseStmt() Stmt {
@@ -236,10 +251,14 @@ func (p *Parser) parseAssign() Expr {
 	expr := p.parseOr()
 	if p.match(EQUAL) {
 		value := p.parseAssign()
-		if v, ok := expr.(*Variable); ok {
+		switch v := expr.(type) {
+		case *Variable:
 			return &Assign{name: v.name, val: value}
+		case *GetExpr:
+			return &SetExpr{object: v.object, name: v.name, value: value}
+		default:
+			runtimeErrf("Invalide assignment target %T", expr)
 		}
-		runtimeErrf("Invalide assignment target %T", expr)
 	}
 	return expr
 }
@@ -328,6 +347,11 @@ func (p *Parser) parseCall() Expr {
 		// Looping since we could have repeated calls like: callback()().
 		if p.match(PAREN_LEFT) {
 			expr = p.finishCall(expr)
+
+		} else if p.match(DOT) {
+			name := p.consume(IDENTIFIER, "Expected property name after '.'.")
+			expr = &GetExpr{name: name, object: expr}
+
 		} else {
 			break
 		}
@@ -373,6 +397,8 @@ func (p *Parser) parsePrimary() Expr {
 		return &Grouping{group: expr}
 	case p.match(IDENTIFIER):
 		return &Variable{name: p.previous()}
+	case p.match(THIS):
+		return &ThisExpr{keyword: p.previous()}
 	default:
 		at := p.peek()
 		p.error(at.Line, "Expected expression")

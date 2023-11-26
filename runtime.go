@@ -10,20 +10,26 @@ type callable interface {
 	arity() int
 }
 
-type function struct {
-	decl    *FuncStmt
-	closure *Env
+type LoxFunction struct {
+	decl          *FuncStmt
+	closure       *Env
+	isInitializer bool
 }
 
-func (f *function) arity() int {
+func (f *LoxFunction) arity() int {
 	return len(f.decl.params)
 }
 
-func (f *function) call(i *Interpreter, args []any) (ret any) {
+func (f *LoxFunction) call(i *Interpreter, args []any) (ret any) {
 	// Using panics to unwind the stack on return...
 	defer func() {
 		if r := recover(); r != nil {
 			if re, ok := r.(returnValue); ok {
+				// Constructors implicitly return "this".
+				if f.isInitializer {
+					ret = f.closure.get("this")
+					return
+				}
 				ret = re.any
 			} else {
 				panic(r)
@@ -38,11 +44,87 @@ func (f *function) call(i *Interpreter, args []any) (ret any) {
 	}
 
 	i.executeBlock(f.decl.body, env)
+
+	if f.isInitializer {
+		return f.closure.get("this")
+	}
+
 	return nil
 }
 
-func (f *function) String() string {
+func (f *LoxFunction) String() string {
 	return fmt.Sprintf("<fn %s>", f.decl.name.Literal)
+}
+
+func (f *LoxFunction) bind(inst *LoxInstance) *LoxFunction {
+	env := f.closure.Fork()
+	env.define("this", inst)
+	return &LoxFunction{closure: env, decl: f.decl, isInitializer: f.isInitializer}
+}
+
+type LoxClass struct {
+	name    string
+	methods map[string]*LoxFunction
+}
+
+func (c *LoxClass) arity() int {
+	init := c.findMethod("init")
+	if init == nil {
+		return 0
+	}
+	return init.arity()
+}
+
+// calling a class constructs an instance.
+func (c *LoxClass) call(i *Interpreter, args []any) any {
+	instance := &LoxInstance{class: c, fields: map[string]any{}}
+
+	init := c.findMethod("init")
+	if init != nil {
+		init.bind(instance).call(i, args)
+	}
+
+	return instance
+}
+
+func (c *LoxClass) String() string {
+	return fmt.Sprintf("<class %s>", c.name)
+}
+
+func (c *LoxClass) findMethod(name string) *LoxFunction {
+	m, ok := c.methods[name]
+	if ok {
+		return m
+	}
+	return nil
+}
+
+type LoxInstance struct {
+	class  *LoxClass
+	fields map[string]any
+}
+
+func (i *LoxInstance) set(name string, v any) {
+	i.fields[name] = v
+}
+
+func (i *LoxInstance) get(name string) any {
+	v, ok := i.fields[name]
+	if ok {
+		return v
+	}
+
+	m := i.class.findMethod(name)
+	if m != nil {
+		return m.bind(i)
+	}
+
+	runtimeErrf("Undefined property %q", name)
+	return nil
+}
+
+func (i *LoxInstance) String() string {
+	return fmt.Sprintf("<instance %s>", i.class.name)
 }
 
 type runtimeError struct{ error }
@@ -301,6 +383,30 @@ func (i *Interpreter) execute(node Node) any {
 		}
 		return callable.call(i, args)
 
+	case *GetExpr:
+		obj := i.execute(v.object)
+		inst, ok := obj.(*LoxInstance)
+		if !ok {
+			runtimeErrf("Object %T does not have properties, must be instance.", obj)
+			return nil
+		}
+		return inst.get(v.name.Literal)
+
+	case *SetExpr:
+		obj := i.execute(v.object)
+
+		inst, ok := obj.(*LoxInstance)
+		if !ok {
+			runtimeErrf("Object %T does not have fields, must be instance.", obj)
+			return nil
+		}
+		val := i.execute(v.value)
+		inst.set(v.name.Literal, val)
+		return val
+
+	case *ThisExpr:
+		return i.lookupVariable(v.keyword, v)
+
 	case *PrintStmt:
 		val := i.execute(v.expr)
 		fmt.Fprintf(i.out, "%v\n", val)
@@ -311,9 +417,10 @@ func (i *Interpreter) execute(node Node) any {
 		return nil
 
 	case *FuncStmt:
-		fn := &function{
-			decl:    v,
-			closure: i.scope,
+		fn := &LoxFunction{
+			decl:          v,
+			closure:       i.scope,
+			isInitializer: false,
 		}
 		i.scope.define(v.name.Literal, fn)
 		return nil
@@ -350,6 +457,29 @@ func (i *Interpreter) execute(node Node) any {
 			value = i.execute(v.value)
 		}
 		panic(returnValue{value})
+
+	case *ClassStmt:
+		i.scope.define(v.name.Literal, nil)
+
+		methods := map[string]*LoxFunction{}
+		for _, m := range v.methods {
+			fun, ok := m.(*FuncStmt)
+			if !ok {
+				runtimeErrf("not a method")
+			}
+			methods[fun.name.Literal] = &LoxFunction{
+				decl:          fun,
+				closure:       i.scope,
+				isInitializer: fun.name.Literal == "init",
+			}
+		}
+
+		class := &LoxClass{
+			name:    v.name.Literal,
+			methods: methods,
+		}
+		i.scope.assign(v.name.Literal, class)
+		return nil
 
 	default:
 		panic(fmt.Sprintf("unknown node: %T :: %#v", node, node))
@@ -396,13 +526,23 @@ type funcType int
 const (
 	funcNone funcType = iota
 	funcFunc
+	funcMethod
+	funcInit
+)
+
+type classType int
+
+const (
+	classNone classType = iota
+	classClass
 )
 
 type Resolver struct {
 	i      *Interpreter
 	scopes []map[string]bool
 
-	currentFunc funcType
+	currentFunc  funcType
+	currentClass classType
 }
 
 func NewResolver(i *Interpreter) *Resolver {
@@ -424,7 +564,6 @@ func (r *Resolver) resolve(node Node) any {
 			r.resolve(s)
 		}
 		r.endScope()
-		return nil
 
 	case *VarStmt:
 		r.declare(v.name)
@@ -432,7 +571,6 @@ func (r *Resolver) resolve(node Node) any {
 			r.resolve(v.init)
 		}
 		r.define(v.name)
-		return nil
 
 	case *Variable:
 		if len(r.scopes) > 0 {
@@ -443,54 +581,57 @@ func (r *Resolver) resolve(node Node) any {
 			}
 		}
 		r.resolveLocal(v, v.name)
-		return nil
 
 	case *Assign:
 		r.resolve(v.val)
 		r.resolveLocal(v, v.name)
-		return nil
 
 	case *FuncStmt:
 		r.declare(v.name)
 		r.define(v.name)
 		r.resolveFunction(v, funcFunc)
-		return nil
 
 	case *Grouping:
 		r.resolve(v.group)
-		return nil
 
 	case *BinaryExpr:
 		r.resolve(v.left)
 		r.resolve(v.right)
-		return nil
 
 	case *LogicalExpr:
 		r.resolve(v.left)
 		r.resolve(v.right)
-		return nil
 
 	case *UnaryExpr:
 		r.resolve(v.right)
-		return nil
 
 	case *Literal:
-		return nil
 
 	case *Call:
 		r.resolve(v.callee)
 		for _, arg := range v.args {
 			r.resolve(arg)
 		}
-		return nil
+
+	case *GetExpr:
+		r.resolve(v.object)
+
+	case *SetExpr:
+		r.resolve(v.object)
+		r.resolve(v.value)
+
+	case *ThisExpr:
+		if r.currentClass == classNone {
+			runtimeErrf("Can't use this outside a class.")
+			return nil
+		}
+		r.resolveLocal(v, v.keyword)
 
 	case *PrintStmt:
 		r.resolve(v.expr)
-		return nil
 
 	case *ExprStmt:
 		r.resolve(v.expr)
-		return nil
 
 	case *IfStmt:
 		r.resolve(v.cond)
@@ -498,12 +639,10 @@ func (r *Resolver) resolve(node Node) any {
 		if v.elseBranch != nil {
 			r.resolve(v.elseBranch)
 		}
-		return nil
 
 	case *WhileStmt:
 		r.resolve(v.cond)
 		r.resolve(v.body)
-		return nil
 
 	case *ReturnStmt:
 		if r.currentFunc == funcNone {
@@ -511,13 +650,41 @@ func (r *Resolver) resolve(node Node) any {
 			return nil
 		}
 		if v.value != nil {
+			if r.currentFunc == funcInit {
+				runtimeErrf("Cannot return a value from initializer.")
+				return nil
+				return nil
+			}
 			r.resolve(v.value)
 		}
-		return nil
+
+	case *ClassStmt:
+		enclosing := r.currentClass
+		r.currentClass = classClass
+		defer func() { r.currentClass = enclosing }()
+
+		r.declare(v.name)
+		r.define(v.name)
+
+		r.beginScope()
+		r.scopes[len(r.scopes)-1]["this"] = true
+
+		for _, s := range v.methods {
+			f := s.(*FuncStmt) // FIXME
+			kind := funcMethod
+			if f.name.Literal == "init" {
+				kind = funcInit
+			}
+			r.resolveFunction(f, kind)
+		}
+
+		r.endScope()
 
 	default:
 		panic(fmt.Sprintf("unknown node: %T :: %#v", node, node))
 	}
+
+	return nil
 }
 
 func (r *Resolver) beginScope() {
