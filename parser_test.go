@@ -34,8 +34,7 @@ func TestParser(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parsing failed: %s", err)
 	}
-
-	t.Logf("%#v", exp)
+	_ = exp
 }
 
 func TestParseSyntaxError(t *testing.T) {
